@@ -17,15 +17,21 @@ bool  debug = true;
 //bool  debug = false;
 
 // Temperatures for speeds
-float temp_speed_1_start = 90;    // 
+float temp_speed_1_start = 92;    // 
 float temp_speed_1_stop  = 85;    //
+bool fan_speed_1 = false;
 float temp_speed_2_start = 97;    //
-float temp_speed_2_stop  = 92;    //
-int fan_speed = 0;
+float temp_speed_2_stop  = 90;    //
+bool fan_speed_2 = false;
+unsigned int fan_speed = 0;
 unsigned int  fan_min_time = 30;  // minimal timer for turning on FAN, seconds
+int fan_speed_1_pin = 7;
+int fan_speed_2_pin = 8;
 
-float temp_cut = -40;
-float temp_overheat = 100;
+float sensor_cut = -40;
+float temp_overheat = 130;
+
+int speakerOut = 12;
 
 /*
 T   R1  R2    Vout  
@@ -54,7 +60,10 @@ T   R1  R2    Vout
 CUT 470 200000  4,98827754776276  FAIL TEMP SENSOR
  */
 
-float temp_DB [23][2] = { // R ohm, Temp
+float temp_DB [25][2] = { // R ohm, Temp
+                              65,    130,
+                              91,    120,
+                              127,   110,
                               177,   100,
                               241,    90,
                               332,    80,
@@ -123,23 +132,22 @@ float get_temp()
           t_temp[n] = temp_overheat;
         }
         // Sensor is CUT
-        else if (R2 > temp_DB[21][0]){          
+        else if (R2 > temp_DB[23][0]){          
           if(debug){Serial.print("Sensor is CUT, R:");}
           if(debug){Serial.println(R2);}
           if(debug){Serial.println("Turn FAN speed at level: 1 (LOW)");}
-          t_temp[n] = temp_cut;
+          t_temp[n] = sensor_cut;
           //Serial.println(sizeof(temp_DB)/sizeof(temp_DB[0])-2);
-          //Serial.println(temp_DB[21][0]);
+          //Serial.println(temp_DB[23][0]);
         }
         else {
           for (i=0; R2 >= temp_DB[i][0]; i++){
-            if(debug){Serial.println("Get tables");}
+            /*if(debug){Serial.println("Get tables");}
             if(debug){Serial.println(temp_DB[i][0]);}
             if(debug){Serial.println(temp_DB[i][1]);}
             if(debug){Serial.println(temp_DB[i+1][0]);}
-            if(debug){Serial.println(temp_DB[i+1][1]);}
+            if(debug){Serial.println(temp_DB[i+1][1]);}*/
             delta_t = (temp_DB[i+1][0] - temp_DB[i][0]) / (temp_DB[i][1] - temp_DB[i+1][1]);
-            if(debug){Serial.println(delta_t);}
             t_temp[n] = temp_DB[i+1][1] + (temp_DB[i+1][0] - R2)/delta_t;    
           }
         }
@@ -148,21 +156,20 @@ float get_temp()
           if(debug){Serial.print("Can't get TEMP data, R:");}
           if(debug){Serial.println(R2);}
           if(debug){Serial.println("Turn FAN speed at level: 1 (LOW)");}
-          t_temp[n] = temp_cut;
+          t_temp[n] = sensor_cut;
       }
     
-  if(debug){
-    Serial.println("*****t_temp*****");
-    Serial.println(n+1);
-    Serial.println(t_temp[0]);
-    Serial.println(t_temp[1]);
-    Serial.println(t_temp[2]);
-    Serial.println("*****t_temp*****");
-    }
   delay(250);
   }
 
   // validate temp by t_window
+  if(debug){
+    Serial.println("*****t_temp*****");
+    Serial.println(t_temp[0]);
+    Serial.println(t_temp[1]);
+    Serial.println(t_temp[2]);
+    Serial.println("*****t_temp*****");
+  }
   t_min = t_temp[0];
   t_max = t_temp[0];
   cache = t_temp[0];
@@ -173,9 +180,6 @@ float get_temp()
     if (n == size_t_temp-1) {cache = cache / (size_t_temp);}
   }
   if (t_max - t_min > dt_window){
-    if(debug){Serial.println("Temperature Validation");}
-    if(debug){Serial.println(t_min);}
-    if(debug){Serial.println(t_max);}
     if(debug){Serial.println("BAD Temperature data, use previous TEMP values");}
     return temp;
   }
@@ -188,59 +192,75 @@ float get_temp()
 
 int get_fan_speed()
 {
-    // START FAN SPEED
-    // T <= -40 : start if temp is abnormal, temp <= '-40'
-    if (temp <= temp_cut){
+    // Manage abnormal circuit working
+    if (temp <= sensor_cut){
       Serial.println("Start FAN at 1st speed, abnormal working. Please, check FAN circuit!"); 
+      fan_speed_1 = true;
       fan_speed = 1;
+      return fan_speed;
     }
-    // Engine heating
-    // -40 < T <= 85, Engine is cooled
-    if (temp_cut < temp and temp <= temp_speed_1_stop){
-      Serial.println("FAN stopped, Engine is cooled");
-      fan_speed = 0;
+
+    // Manage 1st speed sensor
+    if (temp >= temp_speed_1_start){
+      Serial.println("FAN 1st speed selected, Engine is WARM");
+      fan_speed_1 = true;
     }
-    // 85 < T < 90, Engine is warming
-    if (temp_speed_1_stop < temp and temp < temp_speed_1_start and fan_speed == 0){
-      Serial.println("FAN stopped, Engine is not heated");
-      fan_speed = 0;
+    else if (temp > temp_speed_1_stop and temp < temp_speed_1_start and fan_speed_1 == true){
+      Serial.println("Engine cooling. FAN 1st speed selected");
+      fan_speed_1 = true;
     }
-    // 90 <= T < 92, Engine is warm
-    if (temp_speed_1_start <= temp and temp < temp_speed_2_stop){
-      Serial.println("FAN 1st speed enable, Engine is warm");
-      fan_speed = 1;
+    else{
+      Serial.println("Engine is not WARM");
+      fan_speed_1 = false;
     }
-    // 92 <= T < 97, Engine is almost HOT
-    if (temp_speed_2_stop <= temp and temp < temp_speed_2_start and fan_speed != 2){
-      Serial.println("FAN 1st speed enable, Engine is almost HOT");
-      fan_speed = 1;
+
+    // Manage 2nd speed sensor
+    if (temp >= temp_speed_2_start){
+      Serial.println("FAN 2nd speed selected, Engine is HOT");
+      fan_speed_2 = true;
     }
-    // 97 <= T, Engine is HOT
-    if (temp_speed_2_start <= temp or temp >= temp_overheat){
-      Serial.println("FAN 2nd speed enable, Engine is HOT");
+    else if (temp > temp_speed_2_stop and temp < temp_speed_2_start and fan_speed_2 == true){
+      Serial.println("Engine cooling. FAN 2nd speed selected");
+      fan_speed_2 = true;
+    }
+    else{
+      Serial.println("Engine is not HOT");
+      fan_speed_2 = false;
+    }
+
+    if (fan_speed_2){
       fan_speed = 2;
-    }
-    // Engine cooling
-    // 92 <= T < 97, Engine is almost HOT and cooling
-    if (temp_speed_2_stop <= temp and temp < temp_speed_2_start and fan_speed == 2){
-      Serial.println("FAN 1st speed enable, Engine is almost HOT");
-      fan_speed = 2;
-    }  
-    /*// 90 <= T < 92, Engine is still warm
-    if (temp_speed_1_start <= temp and temp < temp_speed_2_stop){
-      Serial.println("FAN 1st speed enabled, Engine is warm");
+      }
+    else if(fan_speed_1){
       fan_speed = 1;
-    }*/   
-    // 85 < T < 90, Engine is almost cooled
-    if (temp_speed_1_stop < temp and temp < temp_speed_1_start and fan_speed == 1){
-      Serial.println("FAN 1st speed enable, Engine is warm");
-      fan_speed = 1;
-    }   
+      }
+    else {
+      fan_speed = 0;
+      }
+
     return fan_speed;
 }
 
+void siren() {     //This function produces the 3rd siren (AMBULANCE sound).
+  noTone(speakerOut);  
+  for(int i=800;i<1200;i+=8){
+      tone(speakerOut,i);
+      delay(5);
+      }
+  noTone(speakerOut);
+ 
+}
+
+int start_fan(){
+  return 0;
+  }
+
 void setup()
 {
+  pinMode(fan_speed_1_pin, OUTPUT);
+  pinMode(fan_speed_2_pin, OUTPUT);
+  digitalWrite(fan_speed_1_pin, false);
+  digitalWrite(fan_speed_2_pin, false);
   Serial.begin(9600);
 }
 
@@ -254,6 +274,15 @@ void loop()
     fan_speed = get_fan_speed();
     Serial.print("Select FAN speed: ");
     Serial.println(fan_speed);    
+
+    /*
+     * need use 2 pins for 2 relays
+     * than
+     * use interrupts to start counter 30 sec, that will be updated for speed statuses
+     * FAN will be stopped by counter interrupt 
+     */
+
+    start_fan();
   
     delay(1000);
 }
