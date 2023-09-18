@@ -6,7 +6,7 @@
  **/
 
 #include "sensor_temp.h"
-#include "car_fan_speed_switch.h"
+#include "fan_speed_switch.h"
 #include <avr/power.h>
 
 #define DEBUG true
@@ -33,7 +33,7 @@
 #endif
 
 Temperature_sensor engine_temp;  
-Car_fan_speed_switch fan_speed_select;
+Fan_speed_switch fan_speed_select;
 
 
 // Define temperature sensor cilibration
