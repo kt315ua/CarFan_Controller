@@ -7,16 +7,15 @@
 
 class Fan_PWM {
   private:
-    int speed_state = 0;
     int current_pwm_speed = 0;
     int requested_pwm_speed = 0;
   public:
     bool debug = false;
-    int speed_factor = 5;         // Voltage speed increasing, milliseconds
-    int pwm_pin = 5;              // Port, default D5
-    int pwm_speed_1 = 10;         // PWM value for speed #1
-    int pwm_speed_2 = 255;        // PWM value for speed #2
-    int pwm_speed_select = 0;     // Select speed beetween 1 and 2 or stop
+    unsigned int speed_factor = 5;         // Voltage speed increasing, milliseconds
+    unsigned int pwm_pin = 5;              // Port, default D5
+    unsigned int pwm_speed_1 = 10;         // PWM value for speed #1
+    unsigned int pwm_speed_2 = 255;        // PWM value for speed #2
+    unsigned int pwm_speed_select = 0;     // Select speed beetween 1 and 2 or stop
 
     int init() {
       pinMode(pwm_pin, OUTPUT);   // init port mode
@@ -24,75 +23,55 @@ class Fan_PWM {
     }
 
     int run() {
+      // Define speed FAN direction
+      Serial.print("PWM control (I) - Current speed: ");
+      Serial.println(current_pwm_speed);
+      Serial.print("PWM control (I) - Requested speed: ");
+      Serial.println(pwm_speed_select);
 
-      // If selected speed 1
+      // speed 1
       if (pwm_speed_select == 1) {
-        if (speed_state != pwm_speed_select) {
-          for (current_pwm_speed = 0; current_pwm_speed <= pwm_speed_1; current_pwm_speed++) {
-            if (debug) {
-              Serial.print("DEBUG (fan_control_pwm): FAN speed increase, raw PWM value: ");
-              Serial.println(current_pwm_speed);
-            }
-            analogWrite(pwm_pin, current_pwm_speed);
-            delay(speed_factor);
-          }
-          speed_state = pwm_speed_select;
-        }
-        else {
-          if (debug) {
-            Serial.print("DEBUG (fan_control_pwm): Update FAN speed to: ");
-            Serial.println(pwm_speed_select);
-          }
-          analogWrite(pwm_pin, pwm_speed_1);
-          current_pwm_speed = pwm_speed_1;
-          speed_state = pwm_speed_select;
-        }
+        Serial.print("PWM control (I) - PWM 1st speed, raw: ");
+        Serial.println(pwm_speed_1);
+        requested_pwm_speed = pwm_speed_1;
       }
-
-      // If selected speed 2
+      // speed 2
       else if (pwm_speed_select == 2) {
-        if (speed_state != pwm_speed_select) {
-          if (debug) {
-            Serial.print("DEBUG (fan_control_pwm): Run FAN to speed: ");
-            Serial.println(pwm_speed_select);
-          }
-          for (current_pwm_speed = current_pwm_speed; current_pwm_speed <= pwm_speed_2; current_pwm_speed++) {
-            if (debug) {
-              Serial.print("DEBUG (fan_control_pwm): FAN speed increase, raw PWM value: ");
-              Serial.println(current_pwm_speed);
-            }
-            analogWrite(pwm_pin, current_pwm_speed);
-            delay(speed_factor);
-          }
-          speed_state = pwm_speed_select;
-        }
-        else {
-          if (debug) {
-            Serial.print("DEBUG (fan_control_pwm): Update FAN speed to: ");
-            Serial.println(pwm_speed_select);
-          }
-          analogWrite(pwm_pin, pwm_speed_2);
-          current_pwm_speed = pwm_speed_2;
-          speed_state = pwm_speed_select;
-        }
+
+        Serial.print("PWM control (I) - PWM 2nd speed, raw: ");
+        Serial.println(pwm_speed_2);
+        requested_pwm_speed = pwm_speed_2;
+      }
+      // stop
+      else {
+        Serial.println("PWM control (I) - PWM stop: 0");
+        requested_pwm_speed = 0;
       }
 
-      // If selected speed 0
-      else {
-        if (debug) {
-          Serial.println("DEBUG (fan_control_pwm): Stop FAN");
+      // Increase FAN speed
+      if (current_pwm_speed < requested_pwm_speed) {
+        for (; current_pwm_speed <= requested_pwm_speed; current_pwm_speed++) {
+          Serial.print("PWM control (I) - Increase speed: ");
+          Serial.println(current_pwm_speed);
+          analogWrite(pwm_pin, current_pwm_speed);
+          delay(speed_factor);
         }
-        analogWrite(pwm_pin, 0);
-        current_pwm_speed = 0;
-        speed_state = pwm_speed_select;
+        current_pwm_speed = requested_pwm_speed;
       }
-      if (debug) {
-        Serial.print("DEBUG (fan_control_pwm): pwm_speed_select: ");
-        Serial.println(pwm_speed_select);
-        Serial.print("DEBUG (fan_control_pwm): speed_state: ");
-        Serial.println(speed_state);
+      // Decrease FAN speed
+      else if (current_pwm_speed > requested_pwm_speed) {
+        for (; current_pwm_speed >= requested_pwm_speed; current_pwm_speed--) {
+          Serial.print("PWM control (I) - Decrease speed: ");
+          Serial.println(current_pwm_speed);
+          analogWrite(pwm_pin, current_pwm_speed);
+          delay(speed_factor);
+        }
+        current_pwm_speed = requested_pwm_speed;
+      }
+      // Do nothing
+      else {
+          Serial.println("PWM control (I) - No need to change speed");
       }
       return 0;
     }
-
 };

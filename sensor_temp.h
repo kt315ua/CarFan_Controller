@@ -7,18 +7,16 @@
 
 class Temperature_sensor {
   private:
-    int analogPin = 0;          // pin A0
-    float adc_max = 1024;
+    unsigned int analogPin = 0;         // pin A0
+    unsigned int ADC_Raw = 0;           // Get temp voltage
+    unsigned int ADC_MAX = 1023;
     float t_temp[3] = {0, 0, 0};
-    float ADC_Raw = 0;          // Get temp voltage
     float temp = 0;
-
   public:
-    bool debug = false;
-    float R1 = 220;             // STD nominal
-    float R_Sensor = 3520;            // Default normal operate
-    float dt_window = 5;
-    unsigned int error = 0;     // 0 - normal operate, 1 - low impendance(overheat), 2 - hi empendance (cut), 3 - cant get data (short circuit)
+    unsigned int R1 = 220;              // STD nominal
+    unsigned int R_Sensor = 3520;       // Default normal operate
+    unsigned int dt_window = 5;
+    unsigned int error = 0;             // 0 - normal operate, 1 - low impendance(overheat), 2 - hi empendance (cut), 3 - cant get data (short circuit)
 
     /*
       T   R1  R2    Vout
@@ -47,7 +45,8 @@ class Temperature_sensor {
       CUT 470 200000  4,98827754776276  FAIL TEMP SENSOR
     */
 
-    float temp_DB [25][2] = { // R ohm, Temp
+    // R ohm, Temp
+    int temp_DB [25][2] = {
       {65,    130},
       {91,    120},
       {127,   110},
@@ -78,70 +77,73 @@ class Temperature_sensor {
 
     float get_temp()
     {
-      int i = 0, n = 0;
+      unsigned int i = 0, n = 0;
       float delta_t = 0;
       float cache = 0, t_max = 0, t_min = 0;
-      int size_t_temp = sizeof(t_temp) / sizeof(t_temp[0]);
-      int size_temp_DB = sizeof(temp_DB) / sizeof(temp_DB[0]);
-
+      unsigned int size_t_temp = sizeof(t_temp) / sizeof(t_temp[0]);
+      unsigned int size_temp_DB = sizeof(temp_DB) / sizeof(temp_DB[0]);
       // fill temp massive
       for (n = 0; n < size_t_temp; n++) {
-
-        ADC_Raw = analogRead(analogPin);   // Get value: 0-1023
+        ADC_Raw = analogRead(analogPin);
+        Serial.print("Sensor (D) - ADC Raw: ");
+        Serial.println(ADC_Raw);
         if (ADC_Raw) {
-          if (debug) {
-            Serial.print("DEBUG (sensor_temp): ADC Raw:  ");
-            Serial.println(int(ADC_Raw));
-          }
-
-          R_Sensor = (R1 * ADC_Raw) / (adc_max - ADC_Raw);
-          if (debug) {
-            Serial.print("DEBUG (sensor_temp): R Sensor: ");
-            Serial.print(R_Sensor);
-            Serial.println(" Ohm");
-          }
-
-          // Overheat detect
-          if (R_Sensor < temp_DB[0][0]) {
-            t_temp[n] = temp_DB[0][1];
-            error = 1;
-          }
-          // Sensor is CUT
-          else if (R_Sensor > temp_DB[size_temp_DB - 1][0]) {
+          if (ADC_Raw == ADC_MAX) {
             t_temp[n] = temp_DB[size_temp_DB - 1][1];
             error = 2;
-            // Calc current temperature
+            Serial.println("Sensor (E) - Sensor is CUT?");
+          }
+          else if (ADC_Raw == 0) {
+            t_temp[n] = temp_DB[0][1];
+            error = 1;
+            Serial.println("Sensor (E) - Sensor is SHORTCUT?");
           }
           else {
-            for (i = 0; R_Sensor >= temp_DB[i][0]; i++) {
-              delta_t = (temp_DB[i + 1][0] - temp_DB[i][0]) / (temp_DB[i][1] - temp_DB[i + 1][1]);
-              t_temp[n] = temp_DB[i + 1][1] + (temp_DB[i + 1][0] - R_Sensor) / delta_t;
+            R_Sensor = int(float(R1) * float(ADC_Raw) / (ADC_MAX - ADC_Raw));
+            Serial.print("Sensor (E) - R Sensor, Ohm: ");
+            Serial.println(R_Sensor);
+
+            // Overheat detect
+            if (R_Sensor < temp_DB[0][0]) {
+              t_temp[n] = temp_DB[0][1];
+              error = 1;
+              Serial.println("Sensor (E) - Overheat detect");
             }
-            error = 0;
+            // Sensor is CUT
+            else if (R_Sensor > temp_DB[size_temp_DB - 1][0]) {
+              t_temp[n] = temp_DB[size_temp_DB - 1][1];
+              error = 2;
+              Serial.println("Sensor (E) - Sensor is CUT");
+              // Calc current temperature
+            }
+            else {
+              for (i = 0; R_Sensor >= temp_DB[i][0]; i++) {
+                delta_t = (temp_DB[i + 1][0] - temp_DB[i][0]) / (temp_DB[i][1] - temp_DB[i + 1][1]);
+                t_temp[n] = temp_DB[i + 1][1] + (temp_DB[i + 1][0] - R_Sensor) / delta_t;
+              }
+              error = 0;
+            }
           }
         }
-        // Can get TEMP, set FAKE temp for OVERHEAT
+
+        // Can't get TEMP, set FAKE temp for OVERHEAT
         else {
           t_temp[n] = temp_DB[0][1];
           error = 3;
+          Serial.println("Sensor (E) - Can't get TEMP");
         }
         delay(333);
       }
 
       // validate temp by t_window
-      if (debug) {
-        Serial.println("DEBUG (sensor_temp): =====> t_temp <=====");
-        Serial.print("DEBUG (sensor_temp): test temp #1: ");
-        Serial.print(t_temp[0]);
-        Serial.println(" 'C");
-        Serial.print("DEBUG (sensor_temp): test temp #2: ");
-        Serial.print(t_temp[1]);
-        Serial.println(" 'C");
-        Serial.print("DEBUG (sensor_temp): test temp #3: ");
-        Serial.print(t_temp[2]);
-        Serial.println(" 'C");
-        Serial.println("DEBUG (sensor_temp): =====> t_temp <=====");
-      }
+      Serial.println("Sensor (D) =====> t_temp <=====");
+      Serial.print("Sensor (D) - test temp #1, 'C: ");
+      Serial.println(t_temp[0]);
+      Serial.print("Sensor (D) - test temp #2, 'C: ");
+      Serial.println(t_temp[1]);
+      Serial.print("Sensor (D) - test temp #3, 'C: ");
+      Serial.println(t_temp[2]);
+      Serial.println("Sensor (D) =====> t_temp <=====");
       t_min = t_temp[0];
       t_max = t_temp[0];
       cache = t_temp[0];
@@ -157,15 +159,12 @@ class Temperature_sensor {
           cache = cache / (size_t_temp);
         }
       }
-      if (t_max - t_min > dt_window) {
-        if (debug) {
-          Serial.println("BAD Temperature data, use previous TEMP values");
-        }
-      }
-      else {
+      if (t_max - t_min <= dt_window) {
+        // Update temp if data is valid. Else - use previous data
         temp = cache;
       }
+      Serial.print("Sensor (I) - Temperature, 'C: ");
+      Serial.println(temp);
       return temp;
     }
-
 };
